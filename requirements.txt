@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+aiogram
+pydantic-settings
+alembic
+redis
+httpx
+beautifulsoup4
+celery

@@ -1,0 +1,64 @@
+services:
+  # База данных PostgreSQL
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: price_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Прокидываем на 5433, чтобы не конфликтовать со старым проектом
+
+  # Redis — брокер сообщений для Celery и кэша
+  redis:
+    image: redis:7-alpine
+    restart: always
+
+  worker:
+    build: .
+    command: celery -A app.tasks worker --beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db/price_tracker
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app/app
+    depends_on:
+      - db
+      - redis
+
+  # Телеграм-бот (основной процесс сейчас)
+  bot:
+    build: .
+    restart: always
+    command: python app/bot.py
+    volumes:
+      - .:/app
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - DATABASE_URL=postgresql+asyncpg://user:password@db:5432/price_tracker
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  # FastAPI (админка проекта)
+  app:
+    build: .
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000" # Твой старый проект на 8000, этот будет на 8001
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db:5432/price_tracker
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
